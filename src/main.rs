@@ -22,7 +22,7 @@ fn main() -> Result<(), std::io::Error> {
     let mut s256 = Sha256::new();
 
     loop {
-        let read = s256.sum(&mut stdin)?;
+        let read = s256.update(&mut stdin)?;
         if read != 64 {
             break;
         }
@@ -30,7 +30,7 @@ fn main() -> Result<(), std::io::Error> {
     }
 
     // Compute hash
-    for c in s256.state() {
+    for c in s256.sum() {
         for b in c.to_be_bytes() {
             print!("{:02x?}", b);
         }
@@ -40,10 +40,10 @@ fn main() -> Result<(), std::io::Error> {
 
     Ok(())
 }
+
 struct Sha256 {
     state: [u32; 8],
     message_length: usize,
-
     buffer: [u8; 128],
     block_read: usize,
 }
@@ -58,31 +58,25 @@ impl Sha256 {
         }
     }
 
-    const fn state(&self) -> [u32; 8] {
-        self.state
-    }
-
-    fn sum_existing_buffer(&mut self) {
-        if self.block_read != 64 {
-            self.pad();
-        }
-
-        self.compress();
-    }
-
-    fn sum<R: Read>(&mut self, r: &mut R) -> Result<usize, std::io::Error> {
+    fn update<R: Read>(&mut self, r: &mut R) -> Result<usize, std::io::Error> {
         let read = r.read(&mut self.buffer[..64])?;
 
         self.block_read = read;
         self.message_length += read;
 
-        if read != 64 {
+        self.compress();
+
+        Ok(read)
+    }
+
+    fn sum(&mut self) -> [u32; 8] {
+        if self.block_read != 64 {
             self.pad();
         }
 
         self.compress();
 
-        Ok(read)
+        self.state
     }
 
     fn pad(&mut self) {
@@ -109,7 +103,7 @@ impl Sha256 {
         let mut state = self.state;
 
         for i in 0..64 {
-            state = round(state, ROUND_CONSTANT[i], msg[i])
+            state = round(state, ROUND_CONSTANT[i], msg[i]);
         }
 
         self.state[0] = self.state[0].wrapping_add(state[0]);
@@ -259,9 +253,7 @@ fn sha256_test() {
         2018687061,
     ];
 
-    s256.sum_existing_buffer();
-
-    assert_eq!(expected_compression, s256.state());
+    assert_eq!(expected_compression, s256.sum());
 }
 
 #[test]
@@ -311,7 +303,5 @@ fn sha256_test2() {
         3050570844, 1061580713, 534957162, 3195609898, 441961969, 83337838, 1903036958, 663347064,
     ];
 
-    s256.sum_existing_buffer();
-
-    assert_eq!(expected_compression, s256.state());
+    assert_eq!(expected_compression, s256.sum());
 }
