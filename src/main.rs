@@ -60,9 +60,12 @@ impl Sha256 {
 
     fn update<R: Read>(&mut self, r: &mut R) -> Result<usize, std::io::Error> {
         let read = r.read(&mut self.buffer[..64])?;
-
         self.block_read = read;
         self.message_length += read;
+
+        if read < 64 {
+            return Ok(read);
+        }
 
         self.compress();
 
@@ -73,8 +76,12 @@ impl Sha256 {
         if self.block_read != 64 {
             self.pad();
         }
-
         self.compress();
+
+        if self.block_read % 64 >= 56 {
+            self.buffer.rotate_left(64);
+            self.compress();
+        }
 
         self.state
     }
@@ -93,8 +100,7 @@ impl Sha256 {
 
         let message_length = (8 * self.message_length).to_be_bytes();
 
-        self.buffer[self.block_read + zero_bytes + 1..self.block_read + zero_bytes + 1 + 8]
-            .copy_from_slice(&message_length);
+        self.buffer[self.block_read + zero_bytes + 1..][..8].copy_from_slice(&message_length);
     }
 
     fn compress(&mut self) {
@@ -118,7 +124,7 @@ impl Sha256 {
 
     fn message_schedule(&mut self) -> [u32; 64] {
         let mut block = [0u32; 64];
-        for (i, buf) in self.buffer.chunks(4).enumerate() {
+        for (i, buf) in self.buffer.chunks(4).enumerate().take(16) {
             block[i] = u32::from_be_bytes([buf[0], buf[1], buf[2], buf[3]])
         }
 
@@ -248,7 +254,7 @@ fn sha256_test() {
 
     assert_eq!(expected_message, s256.message_schedule());
 
-    let expected_compression = [
+    let expected_compression: [u32; 8] = [
         3820012610, 2566659092, 2600203464, 2574235940, 665731556, 1687917388, 2761267483,
         2018687061,
     ];
