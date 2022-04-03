@@ -1,4 +1,7 @@
-use std::io::{self, Read};
+use std::{
+    fs::File,
+    io::{self, Read},
+};
 
 const ROUND_CONSTANT: [u32; 64] = [
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -16,29 +19,63 @@ const IV: [u32; 8] = [
 ];
 
 fn main() -> Result<(), std::io::Error> {
-    let stdin = io::stdin();
-    let mut stdin = stdin.lock();
+    let files: Vec<String> = std::env::args().skip(1).collect();
 
+    if files.is_empty() {
+        let stdin = io::stdin();
+        let mut stdin = stdin.lock();
+
+        let hash = compute(&mut stdin)?;
+        print(hash);
+    } else {
+        for file in files {
+            let mut f = match File::open(file.clone()) {
+                Ok(v) => v,
+                Err(e) => {
+                    println!("error in opening file: {}", e);
+                    continue;
+                }
+            };
+
+            let hash = match compute(&mut f) {
+                Ok(hash) => hash,
+                Err(e) => {
+                    println!("error in computing hash of {}: {}", file, e);
+                    continue;
+                }
+            };
+
+            print!("{}: ", file);
+            print(hash);
+        }
+    }
+
+    Ok(())
+}
+
+fn compute<R: Read>(r: &mut R) -> Result<[u32; 8], std::io::Error> {
     let mut s256 = Sha256::new();
 
     loop {
-        let read = s256.update(&mut stdin)?;
+        let read = s256.update(r)?;
         if read != 64 {
             break;
         }
         s256.buffer.fill(0);
     }
 
-    // Compute hash
-    for c in s256.sum() {
+    Ok(s256.sum())
+}
+
+fn print(hash: [u32; 8]) {
+    for c in hash {
         for b in c.to_be_bytes() {
             print!("{:02x?}", b);
         }
         //        print!(" ")
     }
-    println!();
 
-    Ok(())
+    println!();
 }
 
 struct Sha256 {
