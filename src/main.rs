@@ -1,4 +1,5 @@
 use std::{
+    fmt::Write,
     fs::File,
     io::{self, Read},
 };
@@ -26,13 +27,13 @@ fn main() -> Result<(), std::io::Error> {
         let mut stdin = stdin.lock();
 
         let hash = compute(&mut stdin)?;
-        print(hash);
+        println!("{}", format(hash));
     } else {
         for file in files {
             let mut f = match File::open(file.clone()) {
                 Ok(v) => v,
                 Err(e) => {
-                    println!("error in opening file: {}", e);
+                    eprintln!("error in opening file: {}", e);
                     continue;
                 }
             };
@@ -40,13 +41,12 @@ fn main() -> Result<(), std::io::Error> {
             let hash = match compute(&mut f) {
                 Ok(hash) => hash,
                 Err(e) => {
-                    println!("error in computing hash of {}: {}", file, e);
+                    eprintln!("error in computing hash of {}: {}", file, e);
                     continue;
                 }
             };
 
-            print!("{}: ", file);
-            print(hash);
+            println!("{}: {}", file, format(hash));
         }
     }
 
@@ -67,15 +67,16 @@ fn compute<R: Read>(r: &mut R) -> Result<[u32; 8], std::io::Error> {
     Ok(s256.sum())
 }
 
-fn print(hash: [u32; 8]) {
+fn format(hash: [u32; 8]) -> String {
+    let mut out = String::with_capacity(32 * 8);
+
     for c in hash {
         for b in c.to_be_bytes() {
-            print!("{:02x?}", b);
+            write!(out, "{:02x}", b).expect("error in converting hash u32 -> hex");
         }
-        //        print!(" ")
     }
 
-    println!();
+    out
 }
 
 struct Sha256 {
